@@ -1,5 +1,3 @@
-import { JSDOM } from 'jsdom';
-import { Readability } from '@mozilla/readability';
 import * as cheerio from 'cheerio';
 
 export interface ArticleData {
@@ -35,7 +33,7 @@ async function reuploadImage(wechatUrl: string): Promise<string | null> {
     const uploadRes = await fetch('https://api.imgur.com/3/image', {
       method: 'POST',
       headers: {
-        'Authorization': 'Client-ID c4a4a4506ee7e57', // 公共匿名Client ID
+        'Authorization': 'Client-ID c4a4a4506ee7e57',
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
@@ -73,55 +71,44 @@ export async function parseWeChat(url: string): Promise<ArticleData> {
     console.log("HTML Preview:", html);
   }
 
-  // 0. Pre-process HTML for WeChat
-  // Replace lazy loaded images
+  // Pre-process HTML for WeChat lazy loading
   html = html.replace(/data-src=/g, 'src=');
 
-  // 1. Clean Parsing with Readability
-  // We use JSDOM for Readability input
-  const dom = new JSDOM(html, { url });
-  const doc = dom.window.document;
+  const $ = cheerio.load(html);
 
-  // Fix for lazy loading if regex missed (sometimes attributes are quoted differently)
-  const images = doc.querySelectorAll('img');
-  images.forEach(img => {
-    if (!img.src && img.dataset.src) {
-      img.src = img.dataset.src;
-    }
-  });
+  // Extract metadata
+  const title = $('#activity-name').text().trim() ||
+    $('meta[property="og:title"]').attr('content') ||
+    $('title').text() ||
+    'Untitled';
 
-  const reader = new Readability(doc);
-  const article = reader.parse();
+  const author = $('#js_name').text().trim() ||
+    $('meta[name="author"]').attr('content') ||
+    'WeChat Author';
 
-  // 3. Prefer raw extraction for WeChat body to preserve structure
-  // Readability often strips WeChat's nested <section> tags which contain 90% of the styling/structure.
-  let contentHtml = '';
-  const $ = cheerio.load(html); // Load processed HTML (with src fixed)
+  const excerpt = $('meta[name="description"]').attr('content') ||
+    $('meta[property="og:description"]').attr('content') ||
+    '';
 
   // Remove scripts and styles
   $('#js_content script, #js_content style').remove();
 
-  contentHtml = $('#js_content').html() || $('.rich_media_content').html() || article?.content || '';
+  // Get content HTML
+  const contentHtml = $('#js_content').html() || $('.rich_media_content').html() || '';
 
-  // 2. Convert Clean HTML to Notion Blocks (with image reuploading)
+  // Convert to Notion Blocks
   const blocks = await convertHtmlToBlocks(contentHtml);
 
-  return {
-    title: article?.title || $('meta[property="og:title"]').attr('content') || 'Untitled',
-    author: article?.byline || $('meta[name="author"]').attr('content') || 'WeChat Author',
-    excerpt: article?.excerpt || $('meta[name="description"]').attr('content') || '',
-    blocks
-  };
+  return { title, author, excerpt, blocks };
 }
 
 async function convertHtmlToBlocks(html: string): Promise<any[]> {
   const $ = cheerio.load(html);
   const blocks: any[] = [];
-  const seenTexts = new Set<string>(); // Avoid duplicate paragraphs
-  const seenImages = new Set<string>(); // Avoid duplicate images
-  const pendingImages: { index: number; src: string }[] = []; // Track images to reupload
+  const seenTexts = new Set<string>();
+  const seenImages = new Set<string>();
+  const pendingImages: { index: number; src: string }[] = [];
 
-  // Helper to create text block
   const createTextBlock = (type: string, content: string) => ({
     object: 'block',
     type,
@@ -136,34 +123,26 @@ async function convertHtmlToBlocks(html: string): Promise<any[]> {
     image: { type: 'external', external: { url } }
   });
 
-  // True recursive traversal
   function traverse(element: any) {
     if (!element) return;
 
     const tagName = element.name;
     const $el = $(element);
 
-    // Handle Images - leaf node
+    // Handle Images
     if (tagName === 'img') {
-      // WeChat uses multiple attributes for images
-      let src = $el.attr('src') ||
-        $el.attr('data-src') ||
-        $el.attr('data-croporisrc') ||
-        $el.attr('data-backsrc');
-
-      // Clean up the URL (remove size parameters if needed)
+      let src = $el.attr('src') || $el.attr('data-src') || $el.attr('data-croporisrc');
       if (src && src.startsWith('http') && !seenImages.has(src)) {
         seenImages.add(src);
         console.log('Found image:', src.substring(0, 80));
-        // Add placeholder, will be replaced after async upload
         const blockIndex = blocks.length;
-        blocks.push(createImageUrl(src)); // Temporarily use original
+        blocks.push(createImageUrl(src));
         pendingImages.push({ index: blockIndex, src });
       }
       return;
     }
 
-    // Handle Headers - leaf node (don't recurse into headers)
+    // Handle Headers
     if (/^h[1-6]$/.test(tagName)) {
       const text = $el.text().trim();
       if (text && !seenTexts.has(text)) {
@@ -175,7 +154,7 @@ async function convertHtmlToBlocks(html: string): Promise<any[]> {
       return;
     }
 
-    // Handle Lists - process children but don't recurse deeper
+    // Handle Lists
     if (tagName === 'ul' || tagName === 'ol') {
       const type = tagName === 'ul' ? 'bulleted_list_item' : 'numbered_list_item';
       $el.children('li').each((_, li) => {
@@ -188,45 +167,23 @@ async function convertHtmlToBlocks(html: string): Promise<any[]> {
       return;
     }
 
-    // Handle Blockquote
-    if (tagName === 'blockquote') {
-      const text = $el.text().trim();
-      if (text && !seenTexts.has(text)) {
-        seenTexts.add(text);
-        blocks.push(createTextBlock('quote', text));
-      }
-      return;
-    }
-
-    // Handle Paragraphs - these are leaf text nodes
+    // Handle Paragraphs
     if (tagName === 'p') {
-      // First, extract any images inside the paragraph
-      $el.find('img').each((_, img) => {
-        const src = $(img).attr('src');
-        if (src && src.startsWith('http') && !seenImages.has(src)) {
-          seenImages.add(src);
-          blocks.push(createImageUrl(src));
-        }
-      });
-
-      // Then get the text (clone and remove img to get clean text)
-      const $clone = $el.clone();
-      $clone.find('img').remove();
-      const text = $clone.text().trim();
-
+      const text = $el.text().trim();
       if (text && text.length > 1 && !seenTexts.has(text)) {
         seenTexts.add(text);
         blocks.push(createTextBlock('paragraph', text));
       }
+      // Still check for images inside paragraphs
+      $el.find('img').each((_, img) => traverse(img));
       return;
     }
 
-    // For container elements (section, div, span, etc.) - RECURSE into children
+    // Recurse into children
     const children = $el.children().toArray();
     if (children.length > 0) {
       children.forEach(child => traverse(child));
     } else {
-      // No children but might have direct text
       const text = $el.text().trim();
       if (text && text.length > 1 && !seenTexts.has(text)) {
         seenTexts.add(text);
@@ -235,17 +192,16 @@ async function convertHtmlToBlocks(html: string): Promise<any[]> {
     }
   }
 
-  // Start traversal from body's children
+  // Start traversal
   const $body = $('body');
   $body.children().each((_, el) => traverse(el));
 
   console.log(`Extracted ${blocks.length} blocks (${seenImages.size} images, ${seenTexts.size} text blocks)`);
 
-  // Reupload images to Imgur (async)
+  // Reupload images to Imgur
   if (pendingImages.length > 0) {
     console.log(`Reuploading ${pendingImages.length} images to Imgur...`);
 
-    // Process images in parallel (max 3 at a time to avoid rate limits)
     const batchSize = 3;
     for (let i = 0; i < pendingImages.length; i += batchSize) {
       const batch = pendingImages.slice(i, i + batchSize);
@@ -256,14 +212,9 @@ async function convertHtmlToBlocks(html: string): Promise<any[]> {
         })
       );
 
-      // Replace URLs in blocks
       for (const result of results) {
         if (result.newUrl) {
-          blocks[result.index] = {
-            object: 'block',
-            type: 'image',
-            image: { type: 'external', external: { url: result.newUrl } }
-          };
+          blocks[result.index] = createImageUrl(result.newUrl);
         }
       }
     }
