@@ -8,6 +8,14 @@
     "start": "next start"
   },
   "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "@notionhq/client": "^5.4.0",
+    "@types/jsdom": "^27.0.0",
+    "cheerio": "^1.1.2",
+    "dotenv": "^17.2.3",
+    "framer-motion": "^12.23.26",
+    "jsdom": "^27.3.0",
+    "lucide-react": "^0.561.0",
     "next": "16.0.10",
     "react": "19.2.1",
     "react-dom": "19.2.1"
