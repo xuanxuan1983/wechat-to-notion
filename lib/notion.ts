@@ -1,10 +1,25 @@
 import { Client } from '@notionhq/client';
 import { ArticleData } from './parser';
 
-const notion = new Client({ auth: process.env.NOTION_API_KEY });
+// 创建 Notion 客户端的函数，支持用户自定义 API Key
+function createNotionClient(apiKey?: string): Client {
+    const key = apiKey || process.env.NOTION_API_KEY;
+    if (!key) throw new Error("Missing Notion API Key");
+    return new Client({ auth: key });
+}
 
-export async function saveToNotion(data: ArticleData, url: string, tags?: string[]) {
-    if (!process.env.NOTION_DATABASE_ID) throw new Error("Missing NOTION_DATABASE_ID");
+export async function saveToNotion(
+    data: ArticleData,
+    url: string,
+    tags?: string[],
+    userApiKey?: string,
+    userDatabaseId?: string
+) {
+    // 使用用户提供的凭据，或回退到环境变量
+    const databaseId = userDatabaseId || process.env.NOTION_DATABASE_ID;
+    if (!databaseId) throw new Error("Missing Database ID");
+
+    const notion = createNotionClient(userApiKey);
 
     // Add source link as first block
     const sourceBlock = {
@@ -24,7 +39,7 @@ export async function saveToNotion(data: ArticleData, url: string, tags?: string
     try {
         // Create Page with first chunk
         const response = await notion.pages.create({
-            parent: { database_id: process.env.NOTION_DATABASE_ID },
+            parent: { database_id: databaseId },
             icon: { type: 'emoji', emoji: '🔗' },
             properties: {
                 Name: {
@@ -50,7 +65,34 @@ export async function saveToNotion(data: ArticleData, url: string, tags?: string
         return response.id;
     } catch (error: any) {
         console.error("Notion API Error:", error);
-        throw new Error(error.message || "Failed to save to Notion");
+        // 提供更友好的错误信息
+        if (error.code === 'unauthorized') {
+            throw new Error("API Key 无效或已过期");
+        }
+        if (error.code === 'object_not_found') {
+            throw new Error("数据库未找到，请检查 ID 和权限");
+        }
+        throw new Error(error.message || "保存到 Notion 失败");
+    }
+}
+
+// 测试连接函数
+export async function testNotionConnection(apiKey: string, databaseId: string) {
+    const notion = createNotionClient(apiKey);
+
+    try {
+        const database = await notion.databases.retrieve({ database_id: databaseId });
+        // @ts-ignore - title 属性在某些类型中存在
+        const title = database.title?.[0]?.plain_text || 'Database';
+        return { success: true, databaseName: title };
+    } catch (error: any) {
+        if (error.code === 'unauthorized') {
+            throw new Error("API Key 无效");
+        }
+        if (error.code === 'object_not_found') {
+            throw new Error("数据库未找到，请检查 ID 或添加集成权限");
+        }
+        throw new Error(error.message || "连接失败");
     }
 }
 

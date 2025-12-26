@@ -5,9 +5,17 @@ import { saveToNotion } from '@/lib/notion';
 export async function POST(request: Request) {
 
     try {
-        const { url, tags } = await request.json();
+        const { url, tags, apiKey, databaseId } = await request.json();
 
         if (!url) return NextResponse.json({ error: 'URL is required' }, { status: 400 });
+
+        // 验证用户凭据（如果提供）
+        if (apiKey && !databaseId) {
+            return NextResponse.json({ error: '请同时提供数据库 ID' }, { status: 400 });
+        }
+        if (databaseId && !apiKey) {
+            return NextResponse.json({ error: '请同时提供 API Key' }, { status: 400 });
+        }
 
         // validate URL
         try {
@@ -17,7 +25,7 @@ export async function POST(request: Request) {
         }
 
         const article = await parseWeChat(url);
-        const pageId = await saveToNotion(article, url, tags);
+        const pageId = await saveToNotion(article, url, tags, apiKey, databaseId);
 
         return NextResponse.json(
             { success: true, pageId, title: article.title },
