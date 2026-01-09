@@ -25,6 +25,7 @@ export async function POST(request: Request) {
         // AI 摘要
         let summary = '';
         let aiTags: string[] = [];
+        let aiError = null;
         const { aiConfig } = body;
 
         if (aiConfig?.enabled && aiConfig?.apiKey) {
@@ -39,9 +40,11 @@ export async function POST(request: Request) {
                     const aiResult = await generateSummary(textContent, aiConfig.apiKey);
                     summary = aiResult.summary;
                     aiTags = aiResult.tags;
+                    if (aiResult.error) aiError = aiResult.error;
                 }
-            } catch (e) {
+            } catch (e: any) {
                 console.error('AI Summary failed:', e);
+                aiError = e.message;
             }
         }
 
@@ -74,7 +77,12 @@ export async function POST(request: Request) {
         }
 
         return NextResponse.json(
-            { success: true, pageId: resultId, title: article.title },
+            {
+                success: true,
+                pageId: resultId,
+                title: article.title,
+                aiError: aiError // 返回 AI 错误信息
+            },
             {
                 headers: {
                     'Access-Control-Allow-Origin': '*',

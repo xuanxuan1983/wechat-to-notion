@@ -1,4 +1,4 @@
-export async function generateSummary(content: string, apiKey: string): Promise<{ summary: string; tags: string[] }> {
+export async function generateSummary(content: string, apiKey: string): Promise<{ summary: string; tags: string[]; error?: string }> {
     if (!content || !apiKey) {
         return { summary: '', tags: [] };
     }
@@ -52,8 +52,8 @@ export async function generateSummary(content: string, apiKey: string): Promise<
             return { summary: resultString, tags: [] };
         }
 
-    } catch (e) {
+    } catch (e: any) {
         console.error('Generate summary exception:', e);
-        return { summary: '', tags: [] };
+        return { summary: '', tags: [], error: e.message || 'AI request failed' };
     }
 }
