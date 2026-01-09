@@ -53,93 +53,94 @@ export async function getDocumentBlockId(accessToken: string, documentId: string
 export function transformToFeishuBlocks(blocks: any[]): any[] {
     const feishuBlocks: any[] = [];
 
+    // Helper: 构造 Text Element，过滤空内容
+    const createTextElements = (richTraffic: any[]) => {
+        if (!richTraffic || richTraffic.length === 0) {
+            // 飞书不允许空文本块，必须至少有一个空字符或者 placeholder
+            return [{ text_run: { content: " " } }];
+        }
+
+        const elements = richTraffic.map((t: any) => {
+            const style: any = {};
+            if (t.annotations) {
+                if (t.annotations.bold) style.bold = true;
+                if (t.annotations.italic) style.italic = true;
+                if (t.annotations.strikethrough) style.strikethrough = true;
+                if (t.annotations.underline) style.underline = true;
+            }
+            // 链接支持
+            if (t.href) {
+                style.link = { url: t.href };
+            }
+
+            return {
+                text_run: {
+                    content: t.text.content || " ", // 防止空字符串
+                    text_element_style: Object.keys(style).length > 0 ? style : undefined
+                }
+            };
+        });
+
+        return elements.filter((e: any) => e.text_run.content);
+    };
+
     for (const block of blocks) {
-        if (block.type === 'paragraph') {
-            feishuBlocks.push({
-                block_type: 2, // Text
-                text: {
-                    elements: block.paragraph.rich_text.map((t: any) => ({
-                        text_run: {
-                            content: t.text.content,
-                            text_element_style: t.annotations ? {
-                                bold: t.annotations.bold,
-                                italic: t.annotations.italic,
-                                strikethrough: t.annotations.strikethrough,
-                                underline: t.annotations.underline
-                            } : {}
-                        }
-                    }))
+        try {
+            if (block.type === 'paragraph') {
+                const elements = createTextElements(block.paragraph.rich_text);
+                if (elements.length > 0) {
+                    feishuBlocks.push({
+                        block_type: 2, // Text
+                        text: { elements }
+                    });
                 }
-            });
-        } else if (block.type === 'heading_1') {
-            feishuBlocks.push({
-                block_type: 3, // H1
-                heading1: {
-                    elements: block.heading_1.rich_text.map((t: any) => ({
-                        text_run: { content: t.text.content }
-                    }))
+            } else if (block.type === 'heading_1') {
+                feishuBlocks.push({
+                    block_type: 3, // H1
+                    heading1: { elements: createTextElements(block.heading_1.rich_text) }
+                });
+            } else if (block.type === 'heading_2') {
+                feishuBlocks.push({
+                    block_type: 4, // H2
+                    heading2: { elements: createTextElements(block.heading_2.rich_text) }
+                });
+            } else if (block.type === 'heading_3') {
+                feishuBlocks.push({
+                    block_type: 5, // H3
+                    heading3: { elements: createTextElements(block.heading_3.rich_text) }
+                });
+            } else if (block.type === 'bulleted_list_item') {
+                feishuBlocks.push({
+                    block_type: 6, // Bullet
+                    bullet: { elements: createTextElements(block.bulleted_list_item.rich_text) }
+                });
+            } else if (block.type === 'numbered_list_item') {
+                feishuBlocks.push({
+                    block_type: 7, // Ordered
+                    ordered: { elements: createTextElements(block.numbered_list_item.rich_text) }
+                });
+            } else if (block.type === 'quote') {
+                feishuBlocks.push({
+                    block_type: 9, // Quote
+                    quote: { elements: createTextElements(block.quote.rich_text) }
+                });
+            } else if (block.type === 'image') {
+                const url = block.image?.external?.url || block.image?.file?.url;
+                if (url) {
+                    feishuBlocks.push({
+                        block_type: 27, // Image
+                        image: { token: "" }, // 必填 token 字段，虽然是空
+                        _tempUrl: url
+                    });
                 }
-            });
-        } else if (block.type === 'heading_2') {
-            feishuBlocks.push({
-                block_type: 4, // H2
-                heading2: {
-                    elements: block.heading_2.rich_text.map((t: any) => ({
-                        text_run: { content: t.text.content }
-                    }))
-                }
-            });
-        } else if (block.type === 'heading_3') {
-            feishuBlocks.push({
-                block_type: 5, // H3
-                heading3: {
-                    elements: block.heading_3.rich_text.map((t: any) => ({
-                        text_run: { content: t.text.content }
-                    }))
-                }
-            });
-        } else if (block.type === 'bulleted_list_item') {
-            feishuBlocks.push({
-                block_type: 6, // Bullet
-                bullet: {
-                    elements: block.bulleted_list_item.rich_text.map((t: any) => ({
-                        text_run: { content: t.text.content }
-                    }))
-                }
-            });
-        } else if (block.type === 'numbered_list_item') {
-            feishuBlocks.push({
-                block_type: 7, // Ordered
-                ordered: {
-                    elements: block.numbered_list_item.rich_text.map((t: any) => ({
-                        text_run: { content: t.text.content }
-                    }))
-                }
-            });
-        } else if (block.type === 'quote') {
-            feishuBlocks.push({
-                block_type: 9, // Quote
-                quote: {
-                    elements: block.quote.rich_text.map((t: any) => ({
-                        text_run: { content: t.text.content }
-                    }))
-                }
-            });
-        } else if (block.type === 'image') {
-            // image 需要特殊处理：先创建空的图片块，然后上传，再更新
-            // 这里我们先标记它，后续处理
-            feishuBlocks.push({
-                block_type: 27, // Image
-                image: {
-                    // token 此处为空，等待上传后填充
-                },
-                _tempUrl: block.image?.external?.url || block.image?.file?.url
-            });
-        } else if (block.type === 'divider') {
-            feishuBlocks.push({
-                block_type: 22, // Divider
-                divider: {}
-            });
+            } else if (block.type === 'divider') {
+                feishuBlocks.push({
+                    block_type: 22, // Divider
+                    divider: {}
+                });
+            }
+        } catch (e) {
+            console.error('Transform block error:', e, block);
         }
     }
 
