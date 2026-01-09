@@ -67,7 +67,8 @@ export function transformToFeishuBlocks(blocks: any[]): any[] {
                 if (t.annotations.strikethrough) style.strikethrough = true;
                 if (t.annotations.underline) style.underline = true;
             }
-            if (t.href) {
+            // 链接支持
+            if (t.href && (t.href.startsWith('http') || t.href.startsWith('https'))) {
                 style.link = { url: t.href };
             }
 
@@ -79,30 +80,34 @@ export function transformToFeishuBlocks(blocks: any[]): any[] {
             };
         });
 
-        return elements.filter((e: any) => e.text_run.content);
+        const validElements = elements.filter((e: any) => e.text_run.content);
+        // 关键修复：确保不返回空数组，否则 API 会报 1770001
+        return validElements.length > 0 ? validElements : [{ text_run: { content: " " } }];
     };
 
     for (const block of blocks) {
         try {
             if (block.type === 'paragraph') {
                 const elements = createTextElements(block.paragraph.rich_text);
-                if (elements.length > 0) feishuBlocks.push({ block_type: 2, text: { elements } });
+                feishuBlocks.push({ block_type: 2, text: { elements } });
+
+                // 调试：暂时屏蔽高级 Block，排查 1770001 来源
             } else if (block.type === 'heading_1') {
-                feishuBlocks.push({ block_type: 3, heading1: { elements: createTextElements(block.heading_1.rich_text) } });
+                // feishuBlocks.push({ block_type: 3, heading1: { elements: createTextElements(block.heading_1.rich_text) } });
             } else if (block.type === 'heading_2') {
-                feishuBlocks.push({ block_type: 4, heading2: { elements: createTextElements(block.heading_2.rich_text) } });
+                // feishuBlocks.push({ block_type: 4, heading2: { elements: createTextElements(block.heading_2.rich_text) } });
             } else if (block.type === 'heading_3') {
-                feishuBlocks.push({ block_type: 5, heading3: { elements: createTextElements(block.heading_3.rich_text) } });
+                // feishuBlocks.push({ block_type: 5, heading3: { elements: createTextElements(block.heading_3.rich_text) } });
             } else if (block.type === 'bulleted_list_item') {
-                feishuBlocks.push({ block_type: 6, bullet: { elements: createTextElements(block.bulleted_list_item.rich_text) } });
+                // feishuBlocks.push({ block_type: 6, bullet: { elements: createTextElements(block.bulleted_list_item.rich_text) } });
             } else if (block.type === 'numbered_list_item') {
-                feishuBlocks.push({ block_type: 7, ordered: { elements: createTextElements(block.numbered_list_item.rich_text) } });
+                // feishuBlocks.push({ block_type: 7, ordered: { elements: createTextElements(block.numbered_list_item.rich_text) } });
             } else if (block.type === 'quote') {
-                feishuBlocks.push({ block_type: 9, quote: { elements: createTextElements(block.quote.rich_text) } });
+                // feishuBlocks.push({ block_type: 9, quote: { elements: createTextElements(block.quote.rich_text) } });
             } else if (block.type === 'image') {
+                // 暂时保持纯文本占位
                 const url = block.image?.external?.url || block.image?.file?.url;
                 if (url) {
-                    // 调试：强制降级为纯文本，彻底排除 Image Block 数据结构问题
                     feishuBlocks.push({
                         block_type: 2,
                         text: { elements: [{ text_run: { content: `[图片: ${url}]` } }] }
@@ -160,11 +165,10 @@ export async function addBlocksToDocument(
     parentId: string,
     blocks: any[]
 ) {
-    // 1. 预处理：并行上传所有图片
-    // 为了防止大量并发上传请求，我们可以分批或者直接 Promise.all
-    // 考虑到文章图片通常不会太多，我们尝试直接处理
+    // 1. 预处理：这里不需要上传图片了，因为我们在 transform 阶段已经把图片降级为 Text 了
+    // 如果后续恢复了 image_pending 逻辑，这里会重新生效
 
-    // 找出所有图片块
+    // 找出所有图片块 (目前版本不会有 image_pending)
     const finalBlocks: any[] = [];
 
     for (const block of blocks) {
@@ -199,7 +203,7 @@ export async function addBlocksToDocument(
     if (finalBlocks.length === 0) return;
 
     // 2. 分批发送到飞书
-    const CHUNK_SIZE = 50;
+    const CHUNK_SIZE = 20; // 降低到 20 以减少单次回包大小
     for (let i = 0; i < finalBlocks.length; i += CHUNK_SIZE) {
         const chunk = finalBlocks.slice(i, i + CHUNK_SIZE);
 
