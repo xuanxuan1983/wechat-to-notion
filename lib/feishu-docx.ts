@@ -125,14 +125,22 @@ export function transformToFeishuBlocks(blocks: any[]): any[] {
                     quote: { elements: createTextElements(block.quote.rich_text) }
                 });
             } else if (block.type === 'image') {
-                const url = block.image?.external?.url || block.image?.file?.url;
-                if (url) {
-                    feishuBlocks.push({
-                        block_type: 27, // Image
-                        image: { token: "" }, // 必填 token 字段，虽然是空
-                        _tempUrl: url
-                    });
-                }
+                // 调试：暂时禁用图片块，排查 1770001 错误
+                // const url = block.image?.external?.url || block.image?.file?.url;
+                // if (url) {
+                //     feishuBlocks.push({
+                //         block_type: 27, // Image
+                //         image: { token: "token_is_required_by_api" }, // 尝试：飞书可能不允许空 token，即使后续会 replace
+                //         // 实际上，如果必须 token，我们无法预先创建空块。
+                //         // 必须先上传。
+                //         _tempUrl: url
+                //     });
+                // }
+                // 替代方案：写一个文本显示 "[图片]"
+                feishuBlocks.push({
+                    block_type: 2,
+                    text: { elements: [{ text_run: { content: "[图片]" } }] }
+                });
             } else if (block.type === 'divider') {
                 feishuBlocks.push({
                     block_type: 22, // Divider
