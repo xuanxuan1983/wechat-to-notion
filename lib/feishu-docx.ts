@@ -99,17 +99,11 @@ export function transformToFeishuBlocks(blocks: any[]): any[] {
             } else if (block.type === 'heading_3') {
                 feishuBlocks.push({ block_type: 5, heading3: { elements: createTextElements(block.heading_3.rich_text) } });
             } else if (block.type === 'bulleted_list_item') {
-                // 降级方案：将列表转为普通段落
-                feishuBlocks.push({
-                    block_type: 2,
-                    text: { elements: createTextElements(block.bulleted_list_item.rich_text) }
-                });
+                // 暂时跳过列表，排查问题
+                // feishuBlocks.push({...});
             } else if (block.type === 'numbered_list_item') {
-                // 降级方案：将编号列表转为普通段落
-                feishuBlocks.push({
-                    block_type: 2,
-                    text: { elements: createTextElements(block.numbered_list_item.rich_text) }
-                });
+                // 暂时跳过列表，排查问题
+                // feishuBlocks.push({...});
             } else if (block.type === 'quote') {
                 // feishuBlocks.push({ block_type: 9, quote: { elements: createTextElements(block.quote.rich_text) } });
             } else if (block.type === 'image') {
