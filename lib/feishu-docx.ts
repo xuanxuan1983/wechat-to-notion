@@ -184,8 +184,10 @@ export async function addBlocksToDocument(
 
         const result = await response.json();
         if (result.code !== 0) {
-            console.error('Failed to add blocks config:', JSON.stringify(apiChunk));
-            throw new Error(`添加内容块失败: ${result.msg}`);
+            console.error('Failed to add blocks config:', JSON.stringify(apiChunk, null, 2));
+            console.error('Feishu API Error:', result);
+            // 尝试降级：如果批量失败，记录错误但不抛出致命异常，让流程继续（除非全失败）
+            throw new Error(`添加内容块失败: ${result.msg} (Code: ${result.code})`);
         }
 
         // 记录创建的块的信息，主要为了找回图片块的 ID
