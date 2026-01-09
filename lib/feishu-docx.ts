@@ -102,10 +102,10 @@ export function transformToFeishuBlocks(blocks: any[]): any[] {
             } else if (block.type === 'image') {
                 const url = block.image?.external?.url || block.image?.file?.url;
                 if (url) {
-                    // 标记为需要处理的图片，暂不设置 block_type，避免被直接发送
+                    // 调试：强制降级为纯文本，彻底排除 Image Block 数据结构问题
                     feishuBlocks.push({
-                        _type: 'image_pending',
-                        url: url
+                        block_type: 2,
+                        text: { elements: [{ text_run: { content: `[图片: ${url}]` } }] }
                     });
                 }
             } else if (block.type === 'divider') {
