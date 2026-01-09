@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { parseWeChat } from '@/lib/parser';
 import { saveToNotion } from '@/lib/notion';
 import { saveToFeishu } from '@/lib/feishu';
-import { generateSummary } from '@/lib/ai';
 
 export async function POST(request: Request) {
 
@@ -61,7 +60,7 @@ export async function POST(request: Request) {
                 return NextResponse.json({ error: '请提供完整的飞书配置' }, { status: 400 });
             }
 
-            resultId = await saveToFeishu(article, url, finalTags, appId, appSecret, appToken, tableId, summary);
+            resultId = await saveToFeishu(article, url, finalTags, appId, appSecret, appToken, tableId);
         } else {
             // Notion 保存
             const { apiKey, databaseId } = body;
@@ -73,7 +72,7 @@ export async function POST(request: Request) {
                 return NextResponse.json({ error: '请同时提供 API Key' }, { status: 400 });
             }
 
-            resultId = await saveToNotion(article, url, finalTags, apiKey, databaseId, summary);
+            resultId = await saveToNotion(article, url, finalTags, apiKey, databaseId);
         }
 
         return NextResponse.json(
