@@ -105,7 +105,7 @@ export function transformToFeishuBlocks(blocks: any[]): any[] {
                 // 暂时跳过列表，排查问题
                 // feishuBlocks.push({...});
             } else if (block.type === 'quote') {
-                // feishuBlocks.push({ block_type: 9, quote: { elements: createTextElements(block.quote.rich_text) } });
+                feishuBlocks.push({ block_type: 9, quote: { elements: createTextElements(block.quote.rich_text) } });
             } else if (block.type === 'image') {
                 // 暂时保持纯文本占位
                 const url = block.image?.external?.url || block.image?.file?.url;
