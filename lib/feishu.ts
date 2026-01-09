@@ -44,18 +44,32 @@ export async function saveToFeishu(
     const pageBlockId = await getDocumentBlockId(token, documentId);
 
     // 3. 写入内容（文字 + 图片）
+    // 调试：极简化写入，排除 Block 结构错误的可能性
+    // 只写入一个简单的纯文本块
+    const simpleDebugBlock = {
+        block_type: 2,
+        text: {
+            elements: [
+                { text_run: { content: `文章已保存。` } },
+                { text_run: { content: `原文链接：${url}` } }
+            ]
+        }
+    };
+
+    // 批量添加内容（仅简单块）
+    await addBlocksToDocument(token, documentId, pageBlockId, [simpleDebugBlock]);
+
+    /* 原有复杂逻辑，待调试成功后恢复
     // 先添加原文链接
     const sourceBlock = [{
         type: 'paragraph',
         paragraph: {
             rich_text: [
                 { text: { content: '原文链接：' } },
-                { text: { content: url }, href: url } // parser 需要支持 href 或我们在 transform 中处理
+                { text: { content: url }, href: url }
             ]
         }
     }];
-    // 这里简单的构造一个 Parser 结构的 block，transform 会处理
-    // 注意：我们刚才的 transformToFeishuBlocks 需要稍作修改以支持 href，或者我们手动构造飞书 block
 
     // 手动构造原文链接块
     const feishuSourceBlock = {
@@ -69,9 +83,10 @@ export async function saveToFeishu(
     };
 
     const contentBlocks = transformToFeishuBlocks(article.blocks);
-
+    
     // 批量添加内容
     await addBlocksToDocument(token, documentId, pageBlockId, [feishuSourceBlock, ...contentBlocks]);
+    */
 
     // 4. 构造文档链接
     // 飞书云文档链接通常是：https://feishu.cn/docx/DOCUMENT_ID
@@ -81,47 +96,10 @@ export async function saveToFeishu(
     // 字段：标题、链接、保存时间、标签、内容（变为文档链接）
     const fields: Record<string, any> = {
         '标题': article.title || '未命名文章',
-        '链接': { link: url, text: url },
+        '链接': { link: docUrl, text: '查看飞书文档' }, // 链接列存文档链接
+        '原文': { link: url, text: '查看原文' },       // 原文列存原始链接
         '保存时间': Date.now(),
-        // 如果用户有“内容”或“飞书文档”字段，填入文档链接（可选，防止报错）
-        // 我们主要依赖链接跳转，或者用户可以加一个“文档链接”字段
-        // 为了兼容性，我们把文档链接也放在 Description 甚至覆盖链接（不建议）
-        // 最好的方式是：在表格里加一列「文档链接」
     };
-
-    // 尝试探测是否有名为“文档链接”或“正文”的字段？
-    // 由于我们不能动态获取字段名（除非再调一次 API），我们约定：
-    // 如果有「正文」或「文档」字段，则填入。
-    // 但为了简单，我们把 DocX 链接作为返回值返回给前端，
-    // 或者，我们尝试写入一个叫 "飞书文档" 的字段，如果失败则忽略？
-    // 为了稳妥，我们暂时只写入基础字段。
-    // 但是！既然用户想看图文，表格里的“链接”点进去应该是 原文 还是 飞书文档？
-    // 建议：把“链接”字段存原文，把“飞书文档”存到可能存在的文本字段，或者用户自己点开详情？
-    // 另一种方案：把【标题】变成超链接，指向飞书文档？不行，标题通常是文本。
-
-    // 决定：我们在 fields 中尝试写入 '飞书文档' 字段，如果用户没建这个字段，API 会报错吗？
-    // 飞书 API 如果写入不存在的字段会报错 (1254043)。
-    // 所以，我们可以在 getFeishuTables 时顺便获取字段？太复杂。
-    // 策略：只写基础字段。用户可以通过 copy 下面的 documentId 自己关联？
-    // 不，这太难用。
-
-    // 改进策略：
-    // 将 '链接' 字段存为 飞书文档链接 及其 text 为 "查看文档"？
-    // 不，用户可能还想留原文链接。
-
-    // 最终方案：
-    // 在 '链接' 字段存入 { link: docUrl, text: "查看飞书文档" } ？这会丢失原文链接。
-    // 让我们假设用户会创建一个 '正文' 或 '文档' 字段。
-    // 或者，我们在 '标题' 上做文章？不行。
-
-    // 我们先只写基础字段。文档已经创建了，就在飞书云文档列表里。
-    // 但为了关联，我们把 DocUrl 放在返回结果里。
-
-    // 这里我们稍微修改一下，尝试把 "链接" 字段设为 飞书文档链接，
-    // 把 "原文链接" 放在文档的第一行（我们已经做了）。
-    // 这样用户在表格里一点链接，直接进我们生成的文档！这最符合直觉。
-    fields['链接'] = { link: docUrl, text: '查看飞书文档' };
-    fields['原文'] = { link: url, text: '查看原文' };
 
     if (tags && tags.length > 0) {
         fields['标签'] = tags.join(', ');
