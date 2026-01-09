@@ -99,15 +99,17 @@ export function transformToFeishuBlocks(blocks: any[]): any[] {
             } else if (block.type === 'heading_3') {
                 feishuBlocks.push({ block_type: 5, heading3: { elements: createTextElements(block.heading_3.rich_text) } });
             } else if (block.type === 'bulleted_list_item') {
-                // 降级方案：将列表转为带符号的段落
-                const elements = createTextElements(block.bulleted_list_item.rich_text);
-                elements.unshift({ text_run: { content: '• ' } });
-                feishuBlocks.push({ block_type: 2, text: { elements } });
+                // 降级方案：将列表转为普通段落
+                feishuBlocks.push({
+                    block_type: 2,
+                    text: { elements: createTextElements(block.bulleted_list_item.rich_text) }
+                });
             } else if (block.type === 'numbered_list_item') {
-                // 降级方案：将编号列表转为带序号的段落
-                const elements = createTextElements(block.numbered_list_item.rich_text);
-                elements.unshift({ text_run: { content: '- ' } });
-                feishuBlocks.push({ block_type: 2, text: { elements } });
+                // 降级方案：将编号列表转为普通段落
+                feishuBlocks.push({
+                    block_type: 2,
+                    text: { elements: createTextElements(block.numbered_list_item.rich_text) }
+                });
             } else if (block.type === 'quote') {
                 // feishuBlocks.push({ block_type: 9, quote: { elements: createTextElements(block.quote.rich_text) } });
             } else if (block.type === 'image') {
