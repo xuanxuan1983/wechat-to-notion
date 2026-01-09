@@ -46,6 +46,7 @@ export async function saveToFeishu(
     // 3. 写入内容（文字 + 图片）
 
     // 3.1 构造原文链接块 (手动构造，模拟 transform 的输出格式)
+    // 调试：暂时移除 Link 样式，只保留纯文本 URL，排查 1770001 错误
     const feishuSourceBlock = {
         block_type: 2, // Text
         text: {
@@ -57,10 +58,8 @@ export async function saveToFeishu(
                 },
                 {
                     text_run: {
-                        content: url,
-                        text_element_style: {
-                            link: { url: url }
-                        }
+                        content: url
+                        // Link 样式暂时移除
                     }
                 }
             ]
