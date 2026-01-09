@@ -44,49 +44,35 @@ export async function saveToFeishu(
     const pageBlockId = await getDocumentBlockId(token, documentId);
 
     // 3. 写入内容（文字 + 图片）
-    // 调试：极简化写入，排除 Block 结构错误的可能性
-    // 只写入一个简单的纯文本块
-    const simpleDebugBlock = {
-        block_type: 2,
-        text: {
-            elements: [
-                { text_run: { content: `文章已保存。` } },
-                { text_run: { content: `原文链接：${url}` } }
-            ]
-        }
-    };
 
-    // 批量添加内容（仅简单块）
-    await addBlocksToDocument(token, documentId, pageBlockId, [simpleDebugBlock]);
-
-    /* 原有复杂逻辑，待调试成功后恢复
-    // 先添加原文链接
-    const sourceBlock = [{
-        type: 'paragraph',
-        paragraph: {
-            rich_text: [
-                { text: { content: '原文链接：' } },
-                { text: { content: url }, href: url }
-            ]
-        }
-    }];
-
-    // 手动构造原文链接块
+    // 3.1 构造原文链接块 (手动构造，模拟 transform 的输出格式)
     const feishuSourceBlock = {
-        block_type: 2,
+        block_type: 2, // Text
         text: {
             elements: [
-                { text_run: { content: '原文链接：' } },
-                { text_run: { content: url, text_element_style: { link: { url: url } } } }
+                {
+                    text_run: {
+                        content: '原文链接：'
+                    }
+                },
+                {
+                    text_run: {
+                        content: url,
+                        text_element_style: {
+                            link: { url: url }
+                        }
+                    }
+                }
             ]
         }
     };
 
+    // 3.2 转换文章正文
     const contentBlocks = transformToFeishuBlocks(article.blocks);
-    
-    // 批量添加内容
+
+    // 3.3 批量添加内容（addBlocksToDocument 内部会处理图片上传）
+    // 将原文链接块放在最前面
     await addBlocksToDocument(token, documentId, pageBlockId, [feishuSourceBlock, ...contentBlocks]);
-    */
 
     // 4. 构造文档链接
     // 飞书云文档链接通常是：https://feishu.cn/docx/DOCUMENT_ID
@@ -120,7 +106,6 @@ export async function saveToFeishu(
     const result = await response.json();
 
     if (result.code !== 0) {
-        // 如果因为链接格式错误（比如用户设为了文本），尝试降级
         console.error('Feishu Bitable Error:', result);
         throw new Error(result.msg || '写入多维表格失败');
     }
