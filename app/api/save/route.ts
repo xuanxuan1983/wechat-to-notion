@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { parseWeChat } from '@/lib/parser';
 import { saveToNotion } from '@/lib/notion';
 import { saveToFeishu } from '@/lib/feishu';
+import { generateSummary } from '@/lib/ai';
 
 export async function POST(request: Request) {
 
@@ -20,6 +21,32 @@ export async function POST(request: Request) {
 
         // 解析文章
         const article = await parseWeChat(url);
+
+        // AI 摘要
+        let summary = '';
+        let aiTags: string[] = [];
+        const { aiConfig } = body;
+
+        if (aiConfig?.enabled && aiConfig?.apiKey) {
+            try {
+                // 提取纯文本用于 AI
+                const textContent = article.blocks
+                    .filter(b => b.type === 'text' || b.type === 'heading')
+                    .map(b => b.text)
+                    .join('\n');
+
+                if (textContent) {
+                    const aiResult = await generateSummary(textContent, aiConfig.apiKey);
+                    summary = aiResult.summary;
+                    aiTags = aiResult.tags;
+                }
+            } catch (e) {
+                console.error('AI Summary failed:', e);
+            }
+        }
+
+        const finalTags = [...(tags || []), ...aiTags];
+
         let resultId: string;
 
         // 根据平台选择保存方式
@@ -31,7 +58,7 @@ export async function POST(request: Request) {
                 return NextResponse.json({ error: '请提供完整的飞书配置' }, { status: 400 });
             }
 
-            resultId = await saveToFeishu(article, url, tags, appId, appSecret, appToken, tableId);
+            resultId = await saveToFeishu(article, url, finalTags, appId, appSecret, appToken, tableId, summary);
         } else {
             // Notion 保存
             const { apiKey, databaseId } = body;
@@ -43,7 +70,7 @@ export async function POST(request: Request) {
                 return NextResponse.json({ error: '请同时提供 API Key' }, { status: 400 });
             }
 
-            resultId = await saveToNotion(article, url, tags, apiKey, databaseId);
+            resultId = await saveToNotion(article, url, finalTags, apiKey, databaseId, summary);
         }
 
         return NextResponse.json(

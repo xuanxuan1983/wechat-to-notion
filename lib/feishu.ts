@@ -34,7 +34,8 @@ export async function saveToFeishu(
     appId: string,
     appSecret: string,
     appToken: string, // 多维表格的 app_token
-    tableId: string   // 数据表 ID
+    tableId: string,   // 数据表 ID
+    summary?: string   // AI 摘要
 ): Promise<string> {
     // 1. 获取访问令牌
     const token = await getFeishuToken(appId, appSecret);
@@ -90,23 +91,42 @@ export async function saveToFeishu(
         fields['标签'] = tags.join(', ');
     }
 
-    const response = await fetch(
-        `${FEISHU_API_BASE}/bitable/v1/apps/${appToken}/tables/${tableId}/records`,
-        {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ fields }),
-        }
-    );
+    if (summary) {
+        fields['摘要'] = summary;
+    }
 
-    const result = await response.json();
+    // Helper to send request
+    const sendRecord = async (recordFields: any) => {
+        return fetch(
+            `${FEISHU_API_BASE}/bitable/v1/apps/${appToken}/tables/${tableId}/records`,
+            {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ fields: recordFields }),
+            }
+        ).then(res => res.json());
+    };
+
+    // 第一次尝试：包含摘要
+    let result = await sendRecord(fields);
+
+    // 如果失败且是“字段不存在”错误，尝试移除摘要重试
+    if (result.code !== 0 && (result.code === 1254001 || result.msg?.includes('NotExist'))) {
+        console.warn('Feishu write failed with summary, retrying without summary...');
+        const fieldsWithoutSummary = { ...fields };
+        delete fieldsWithoutSummary['摘要'];
+        result = await sendRecord(fieldsWithoutSummary);
+    }
 
     if (result.code !== 0) {
-        console.error('Feishu Bitable Error:', result);
-        throw new Error(result.msg || '写入多维表格失败');
+        console.error('Feishu Bitable Error:', JSON.stringify(result));
+        if (result.code === 1254001 || result.msg?.includes('field') || result.msg?.includes('NotExist')) {
+            throw new Error(`写入飞书失败: ${result.msg} (Code: ${result.code})。请检查表格是否缺少 [标题, 链接, 原文, 保存时间] 这些核心字段。`);
+        }
+        throw new Error(`飞书 API 错误: ${result.msg} (Code: ${result.code})`);
     }
 
     return result.data.record.record_id;

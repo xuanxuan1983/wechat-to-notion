@@ -13,7 +13,8 @@ export async function saveToNotion(
     url: string,
     tags?: string[],
     userApiKey?: string,
-    userDatabaseId?: string
+    userDatabaseId?: string,
+    summary?: string
 ) {
     // 使用用户提供的凭据，或回退到环境变量
     const databaseId = userDatabaseId || process.env.NOTION_DATABASE_ID;
@@ -33,7 +34,22 @@ export async function saveToNotion(
         }
     };
 
-    const allBlocks = [sourceBlock, ...data.blocks];
+    const allBlocks = [sourceBlock];
+
+    if (summary) {
+        const summaryBlock = {
+            object: 'block',
+            type: 'callout',
+            callout: {
+                rich_text: [{ type: 'text', text: { content: summary } }],
+                icon: { type: 'emoji', emoji: '💡' },
+                color: 'gray_background'
+            }
+        };
+        allBlocks.push(summaryBlock as any);
+    }
+
+    allBlocks.push(...data.blocks);
     const chunks = chunkArray(allBlocks, 95); // Safe limit
 
     try {
