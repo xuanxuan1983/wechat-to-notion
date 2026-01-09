@@ -107,12 +107,12 @@ export function transformToFeishuBlocks(blocks: any[]): any[] {
             } else if (block.type === 'quote') {
                 feishuBlocks.push({ block_type: 9, quote: { elements: createTextElements(block.quote.rich_text) } });
             } else if (block.type === 'image') {
-                // 恢复图片上传逻辑
+                // 用户决定去掉图片，仅保留链接
                 const url = block.image?.external?.url || block.image?.file?.url;
                 if (url) {
                     feishuBlocks.push({
-                        _type: 'image_pending',
-                        url: url
+                        block_type: 2,
+                        text: { elements: [{ text_run: { content: `[图片: ${url}]` } }] }
                     });
                 }
             } else if (block.type === 'divider') {
