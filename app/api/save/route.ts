@@ -1,21 +1,15 @@
 import { NextResponse } from 'next/server';
 import { parseWeChat } from '@/lib/parser';
 import { saveToNotion } from '@/lib/notion';
+import { saveToFeishu } from '@/lib/feishu';
 
 export async function POST(request: Request) {
 
     try {
-        const { url, tags, apiKey, databaseId } = await request.json();
+        const body = await request.json();
+        const { url, tags, platform = 'notion' } = body;
 
         if (!url) return NextResponse.json({ error: 'URL is required' }, { status: 400 });
-
-        // 验证用户凭据（如果提供）
-        if (apiKey && !databaseId) {
-            return NextResponse.json({ error: '请同时提供数据库 ID' }, { status: 400 });
-        }
-        if (databaseId && !apiKey) {
-            return NextResponse.json({ error: '请同时提供 API Key' }, { status: 400 });
-        }
 
         // validate URL
         try {
@@ -24,11 +18,36 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 });
         }
 
+        // 解析文章
         const article = await parseWeChat(url);
-        const pageId = await saveToNotion(article, url, tags, apiKey, databaseId);
+        let resultId: string;
+
+        // 根据平台选择保存方式
+        if (platform === 'feishu') {
+            // 飞书保存
+            const { appId, appSecret, appToken, tableId } = body;
+
+            if (!appId || !appSecret || !appToken || !tableId) {
+                return NextResponse.json({ error: '请提供完整的飞书配置' }, { status: 400 });
+            }
+
+            resultId = await saveToFeishu(article, url, tags, appId, appSecret, appToken, tableId);
+        } else {
+            // Notion 保存
+            const { apiKey, databaseId } = body;
+
+            if (apiKey && !databaseId) {
+                return NextResponse.json({ error: '请同时提供数据库 ID' }, { status: 400 });
+            }
+            if (databaseId && !apiKey) {
+                return NextResponse.json({ error: '请同时提供 API Key' }, { status: 400 });
+            }
+
+            resultId = await saveToNotion(article, url, tags, apiKey, databaseId);
+        }
 
         return NextResponse.json(
-            { success: true, pageId, title: article.title },
+            { success: true, pageId: resultId, title: article.title },
             {
                 headers: {
                     'Access-Control-Allow-Origin': '*',
