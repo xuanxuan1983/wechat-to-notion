@@ -121,6 +121,7 @@ export async function saveToFeishu(
     // 把 "原文链接" 放在文档的第一行（我们已经做了）。
     // 这样用户在表格里一点链接，直接进我们生成的文档！这最符合直觉。
     fields['链接'] = { link: docUrl, text: '查看飞书文档' };
+    fields['原文'] = { link: url, text: '查看原文' };
 
     if (tags && tags.length > 0) {
         fields['标签'] = tags.join(', ');
