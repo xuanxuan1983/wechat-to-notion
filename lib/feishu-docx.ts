@@ -91,13 +91,13 @@ export function transformToFeishuBlocks(blocks: any[]): any[] {
                 const elements = createTextElements(block.paragraph.rich_text);
                 feishuBlocks.push({ block_type: 2, text: { elements } });
 
-                // 调试：暂时屏蔽高级 Block，排查 1770001 来源
+                // 第一步测试：启用标题块
             } else if (block.type === 'heading_1') {
-                // feishuBlocks.push({ block_type: 3, heading1: { elements: createTextElements(block.heading_1.rich_text) } });
+                feishuBlocks.push({ block_type: 3, heading1: { elements: createTextElements(block.heading_1.rich_text) } });
             } else if (block.type === 'heading_2') {
-                // feishuBlocks.push({ block_type: 4, heading2: { elements: createTextElements(block.heading_2.rich_text) } });
+                feishuBlocks.push({ block_type: 4, heading2: { elements: createTextElements(block.heading_2.rich_text) } });
             } else if (block.type === 'heading_3') {
-                // feishuBlocks.push({ block_type: 5, heading3: { elements: createTextElements(block.heading_3.rich_text) } });
+                feishuBlocks.push({ block_type: 5, heading3: { elements: createTextElements(block.heading_3.rich_text) } });
             } else if (block.type === 'bulleted_list_item') {
                 // feishuBlocks.push({ block_type: 6, bullet: { elements: createTextElements(block.bulleted_list_item.rich_text) } });
             } else if (block.type === 'numbered_list_item') {
