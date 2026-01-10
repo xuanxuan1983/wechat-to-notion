@@ -21,6 +21,23 @@ export async function saveToNotion(
 
     const notion = createNotionClient(userApiKey);
 
+    // 1. 获取数据库元数据，找到 Title 属性的名称
+    const dbInfo = await notion.databases.retrieve({ database_id: databaseId });
+    const titlePropName = Object.keys(dbInfo.properties).find(
+        key => dbInfo.properties[key].type === 'title'
+    );
+
+    if (!titlePropName) {
+        throw new Error(`无法找到标题属性。可用属性: ${Object.keys(dbInfo.properties).map(k => `${k} (${dbInfo.properties[k].type})`).join(', ')}`);
+    }
+
+    // 2. 检查是否有 Tags 属性 (Multi-select)
+    const tagsPropName = Object.keys(dbInfo.properties).find(
+        key => dbInfo.properties[key].type === 'multi_select' && key === 'Tags'
+    ) || Object.keys(dbInfo.properties).find(
+        key => dbInfo.properties[key].type === 'multi_select'
+    );
+
     // Add source link as first block
     const sourceBlock = {
         object: 'block',
@@ -38,19 +55,22 @@ export async function saveToNotion(
 
     try {
         // Create Page with first chunk
+        const pageProperties: any = {
+            [titlePropName]: {
+                title: [{ text: { content: data.title || 'Untitled Article' } }]
+            }
+        };
+
+        if (tags && tags.length > 0 && tagsPropName) {
+            pageProperties[tagsPropName] = {
+                multi_select: tags.map(tag => ({ name: tag }))
+            };
+        }
+
         const response = await notion.pages.create({
             parent: { database_id: databaseId },
             icon: { type: 'emoji', emoji: '🔗' },
-            properties: {
-                Name: {
-                    title: [{ text: { content: data.title || 'Untitled Article' } }]
-                },
-                ...(tags && tags.length > 0 ? {
-                    Tags: {
-                        multi_select: tags.map(tag => ({ name: tag }))
-                    }
-                } : {})
-            },
+            properties: pageProperties,
             children: chunks[0]
         });
 
@@ -71,6 +91,9 @@ export async function saveToNotion(
         }
         if (error.code === 'object_not_found') {
             throw new Error("数据库未找到，请检查 ID 和权限");
+        }
+        if (error.code === 'validation_error' && error.message.includes('property that does not exist')) {
+            throw new Error(`字段名不匹配。Notion 返回错误: ${error.message}。请检查您是否手动修改了数据库列名。`);
         }
         throw new Error(error.message || "保存到 Notion 失败");
     }
