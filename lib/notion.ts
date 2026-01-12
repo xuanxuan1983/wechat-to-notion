@@ -93,9 +93,9 @@ export async function saveToNotion(
             throw new Error("数据库未找到，请检查 ID 和权限");
         }
         if (error.code === 'validation_error' && error.message.includes('property that does not exist')) {
-            throw new Error(`字段名不匹配。Notion 返回错误: ${error.message}。请检查您是否手动修改了数据库列名。`);
+            throw new Error(`[v2.0] 字段名不匹配。Notion 返回错误: ${error.message}。请检查您是否手动修改了数据库列名。`);
         }
-        throw new Error(error.message || "保存到 Notion 失败");
+        throw new Error(`[v2.0] ${error.message}` || "保存到 Notion 失败");
     }
 }
 
