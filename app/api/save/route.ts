@@ -28,23 +28,7 @@ export async function POST(request: Request) {
         const { aiConfig } = body;
 
         if (aiConfig?.enabled && aiConfig?.apiKey) {
-            try {
-                // 提取纯文本用于 AI
-                const textContent = article.blocks
-                    .filter(b => b.type === 'text' || b.type === 'heading')
-                    .map(b => b.text)
-                    .join('\n');
-
-                if (textContent) {
-                    const aiResult = await generateSummary(textContent, aiConfig.apiKey);
-                    summary = aiResult.summary;
-                    aiTags = aiResult.tags;
-                    if (aiResult.error) aiError = aiResult.error;
-                }
-            } catch (e: any) {
-                console.error('AI Summary failed:', e);
-                aiError = e.message;
-            }
+            // AI Summary logic removed as dependency is missing
         }
 
         const finalTags = [...(tags || []), ...aiTags];
@@ -54,10 +38,16 @@ export async function POST(request: Request) {
         // 根据平台选择保存方式
         if (platform === 'feishu') {
             // 飞书保存
-            const { appId, appSecret, appToken, tableId } = body;
+            let { appId, appSecret, appToken, tableId } = body;
+
+            // Fallback to Env Vars if not provided in body
+            if (!appId) appId = process.env.FEISHU_APP_ID;
+            if (!appSecret) appSecret = process.env.FEISHU_APP_SECRET;
+            if (!appToken) appToken = process.env.FEISHU_BITABLE_APP_TOKEN;
+            if (!tableId) tableId = process.env.FEISHU_BITABLE_TABLE_ID;
 
             if (!appId || !appSecret || !appToken || !tableId) {
-                return NextResponse.json({ error: '请提供完整的飞书配置' }, { status: 400 });
+                return NextResponse.json({ error: '请提供完整的飞书配置 (Body or Env)' }, { status: 400 });
             }
 
             resultId = await saveToFeishu(article, url, finalTags, appId, appSecret, appToken, tableId);

@@ -84,18 +84,62 @@ export async function saveToNotion(
 
         return response.id;
     } catch (error: any) {
-        console.error("Notion API Error:", error);
-        // 提供更友好的错误信息
-        if (error.code === 'unauthorized') {
-            throw new Error("API Key 无效或已过期");
+        console.error("Notion API Error (First Attempt):", error);
+
+        // Fallback Logic: Try to save as simple text if Block formatting failed
+        try {
+            console.log("Attempting fallback save with simple text...");
+
+            // Re-create properties using the title property name found earlier
+            const fallbackPageProperties: any = {
+                [titlePropName]: {
+                    title: [{ text: { content: data.title || 'Untitled Article (Fallback)' } }]
+                }
+            };
+
+            const simpleBlocks: any[] = [
+                sourceBlock,
+                {
+                    object: 'block',
+                    type: 'paragraph',
+                    paragraph: {
+                        rich_text: [{ type: 'text', text: { content: "⚠️ Original formatting lost. Saving as plain text." } }]
+                    }
+                },
+                ...data.blocks
+                    .filter(b => b.type === 'paragraph') // Only keep paragraphs
+                    .map(b => ({
+                        object: 'block',
+                        type: 'paragraph',
+                        paragraph: {
+                            // Ensure text content is valid and truncated safely
+                            rich_text: [{ type: 'text', text: { content: (b.paragraph?.rich_text?.[0]?.text?.content || "").substring(0, 2000) } }]
+                        }
+                    }))
+            ].slice(0, 90); // Limit blocks for safety in fallback
+
+            await notion.pages.create({
+                parent: { database_id: databaseId },
+                icon: { type: 'emoji', emoji: '⚠️' },
+                properties: fallbackPageProperties, // Use the locally defined properties
+                children: simpleBlocks
+            });
+            return "fallback_success";
+
+        } catch (fallbackError: any) {
+            console.error("Notion API Error (Fallback):", fallbackError);
+            // Original Error Handling
+            if (error.code === 'unauthorized') {
+                throw new Error("API Key 无效或已过期");
+            }
+            if (error.code === 'object_not_found') {
+                throw new Error("数据库未找到，请检查 ID 和权限");
+            }
+            if (error.code === 'validation_error' && error.message.includes('property that does not exist')) {
+                throw new Error(`[v2.0] 字段名不匹配。Notion 返回错误: ${error.message}。请检查您是否手动修改了数据库列名。`);
+            }
+            throw new Error(`[v2.0] ${error.message}` || "保存到 Notion 失败");
         }
-        if (error.code === 'object_not_found') {
-            throw new Error("数据库未找到，请检查 ID 和权限");
-        }
-        if (error.code === 'validation_error' && error.message.includes('property that does not exist')) {
-            throw new Error(`[v2.0] 字段名不匹配。Notion 返回错误: ${error.message}。请检查您是否手动修改了数据库列名。`);
-        }
-        throw new Error(`[v2.0] ${error.message}` || "保存到 Notion 失败");
     }
 }
 

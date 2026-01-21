@@ -7,53 +7,15 @@ export interface ArticleData {
   blocks: any[];
 }
 
-// Imgur匿名上传（免费，无需API Key）
-async function reuploadImage(wechatUrl: string): Promise<string | null> {
+// 移除不稳定的 Imgur 上传逻辑，改用 weserv 代理
+// 这是一个开源的图片缓存/代理服务，可以绕过微信的防盗链
+function getProxyUrl(originalUrl: string): string {
   try {
-    console.log('Downloading image from WeChat:', wechatUrl.substring(0, 60) + '...');
-
-    // 下载微信图片（带正确的 Referer 绕过防盗链）
-    const imgRes = await fetch(wechatUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        'Referer': 'https://mp.weixin.qq.com/',
-        'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8'
-      }
-    });
-
-    if (!imgRes.ok) {
-      console.log('Failed to download image:', imgRes.status);
-      return null;
-    }
-
-    const imageBuffer = await imgRes.arrayBuffer();
-    const base64 = Buffer.from(imageBuffer).toString('base64');
-
-    // 上传到 Imgur
-    const uploadRes = await fetch('https://api.imgur.com/3/image', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Client-ID c4a4a4506ee7e57',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        image: base64,
-        type: 'base64'
-      })
-    });
-
-    const uploadData = await uploadRes.json();
-
-    if (uploadData.success && uploadData.data?.link) {
-      console.log('Uploaded to Imgur:', uploadData.data.link);
-      return uploadData.data.link;
-    } else {
-      console.log('Imgur upload failed:', uploadData);
-      return null;
-    }
-  } catch (error) {
-    console.error('Image reupload error:', error);
-    return null;
+    // 移除 http/https 前缀，weserv 不需要，但保留也可以
+    // 这里直接把完整 URL 传给 url 参数即可
+    return `https://images.weserv.nl/?url=${encodeURIComponent(originalUrl)}`;
+  } catch (e) {
+    return originalUrl;
   }
 }
 
@@ -107,7 +69,6 @@ async function convertHtmlToBlocks(html: string): Promise<any[]> {
   const blocks: any[] = [];
   const seenTexts = new Set<string>();
   const seenImages = new Set<string>();
-  const pendingImages: { index: number; src: string }[] = [];
 
   const createTextBlock = (type: string, content: string) => ({
     object: 'block',
@@ -135,9 +96,10 @@ async function convertHtmlToBlocks(html: string): Promise<any[]> {
       if (src && src.startsWith('http') && !seenImages.has(src)) {
         seenImages.add(src);
         console.log('Found image:', src.substring(0, 80));
-        const blockIndex = blocks.length;
-        blocks.push(createImageUrl(src));
-        pendingImages.push({ index: blockIndex, src });
+
+        // 使用 Weserv 代理处理图片 URL
+        const proxyUrl = getProxyUrl(src);
+        blocks.push(createImageUrl(proxyUrl));
       }
       return;
     }
@@ -197,30 +159,6 @@ async function convertHtmlToBlocks(html: string): Promise<any[]> {
   $body.children().each((_, el) => traverse(el));
 
   console.log(`Extracted ${blocks.length} blocks (${seenImages.size} images, ${seenTexts.size} text blocks)`);
-
-  // Reupload images to Imgur
-  if (pendingImages.length > 0) {
-    console.log(`Reuploading ${pendingImages.length} images to Imgur...`);
-
-    const batchSize = 3;
-    for (let i = 0; i < pendingImages.length; i += batchSize) {
-      const batch = pendingImages.slice(i, i + batchSize);
-      const results = await Promise.all(
-        batch.map(async (img) => {
-          const newUrl = await reuploadImage(img.src);
-          return { index: img.index, newUrl };
-        })
-      );
-
-      for (const result of results) {
-        if (result.newUrl) {
-          blocks[result.index] = createImageUrl(result.newUrl);
-        }
-      }
-    }
-
-    console.log('Image reuploading complete');
-  }
 
   return blocks;
 }
